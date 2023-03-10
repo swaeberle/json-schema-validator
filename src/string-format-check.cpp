@@ -154,6 +154,7 @@ void rfc3339_date_time_check(const std::string &value)
 
 const std::string decOctet{R"((?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9]))"}; // matches numbers 0-255
 const std::string ipv4Address{"(?:" + decOctet + R"(\.){3})" + decOctet};
+const std::string ipv4Cidr{R"((?:3[0-2]|[1-2][0-9]|[0-9]))"}; // matches numbers 0-32
 const std::string h16{R"([0-9A-Fa-f]{1,4})"};
 const std::string h16Left{"(?:" + h16 + ":)"};
 const std::string ipv6Address{
@@ -177,6 +178,7 @@ const std::string ipv6Address{
     h16Left + "{0,5}" + h16 + ")?::" + h16 +
     "|(?:" + h16Left + "{0,6}" + h16 + ")?::"
                                        ")"};
+const std::string ipv6Cidr{R"((?:12[0-8]|1[0-1][0-9]|[1-9][0-9]|[0-9]))"}; // matches numbers 0-128
 const std::string ipvFuture{R"([Vv][0-9A-Fa-f]+\.[A-Za-z0-9\-._~!$&'()*+,;=:]+)"};
 const std::string regName{R"((?:[A-Za-z0-9\-._~!$&'()*+,;=]|%[0-9A-Fa-f]{2})*)"};
 const std::string host{
@@ -245,6 +247,10 @@ bool is_ascii(std::string const &value)
  *               / [ *5( h16 ":" ) h16 ] "::"              h16
  *               / [ *6( h16 ":" ) h16 ] "::"
  *
+ * IPv6cidr      = *DIGIT                ; 0-128
+ *
+ * IPv6network   = IPv6address "/" IPv6cidr
+ *
  * h16           = 1*4HEXDIG
  * ls32          = ( h16 ":" h16 ) / IPv4address
  * IPv4address   = dec-octet "." dec-octet "." dec-octet "." dec-octet
@@ -253,6 +259,10 @@ bool is_ascii(std::string const &value)
  *               / "1" 2DIGIT            ; 100-199
  *               / "2" %x30-34 DIGIT     ; 200-249
  *               / "25" %x30-35          ; 250-255
+ *
+ * IPv4cidr      = *DIGIT                ; 0-32
+ *
+ * IPv4network   = IPv4address "/" IPv4cidr
  *
  * reg-name      = *( unreserved / pct-encoded / sub-delims )
  *
@@ -391,6 +401,16 @@ void default_string_format_check(const std::string &format, const std::string &v
 		if (!REGEX_NAMESPACE::regex_match(value, uuidRegex)) {
 			throw std::invalid_argument(value + " is not an uuid string according to RFC 4122.");
 		}
+	} else if (format == "x-anyip") {
+		static const std::regex anyipRegex{"^(?:" + ipv4Address + "|" + ipv6Address + ")$"};
+		if (!std::regex_match(value, anyipRegex)) {
+			throw std::invalid_argument(value + " is neither an IPv4 string according to RFC 2673, nor an IPv6 string according to RFC 5954.");
+		}
+	} else if (format == "x-cidr") {
+		static const std::regex cidrRegex{"^(?:" + ipv4Address + "/" + ipv4Cidr + "|" + ipv6Address + "/" + ipv6Cidr + ")$"};
+		if (!std::regex_match(value, cidrRegex)) {
+			throw std::invalid_argument(value + " is not a network in CIDR notation.");
+		}
 	} else if (format == "regex") {
 		try {
 			REGEX_NAMESPACE::regex re(value, std::regex::ECMAScript);
@@ -401,7 +421,8 @@ void default_string_format_check(const std::string &format, const std::string &v
 		/* yet unsupported JSON schema draft 7 built-ins */
 		static const std::vector<std::string> jsonSchemaStringFormatBuiltIns{
 		    "date-time", "time", "date", "email", "idn-email", "hostname", "idn-hostname", "ipv4", "ipv6", "uri",
-		    "uri-reference", "iri", "iri-reference", "uri-template", "json-pointer", "relative-json-pointer", "regex"};
+		    "uri-reference", "iri", "iri-reference", "uri-template", "json-pointer", "relative-json-pointer", "regex",
+			"x-anyip", "x-cidr"};
 		if (std::find(jsonSchemaStringFormatBuiltIns.begin(), jsonSchemaStringFormatBuiltIns.end(), format) != jsonSchemaStringFormatBuiltIns.end()) {
 			throw std::logic_error("JSON schema string format built-in " + format + " not yet supported. " +
 			                       "Please open an issue or use a custom format checker.");
